@@ -23,7 +23,7 @@ A simple, responsive mood-tracking web app with:
 1. Serve the project locally (any static server). On Windows PowerShell, for example:
    - Python 3 installed:
      ```powershell
-     cd "c:\\Users\\Mariel Cid Camay\\OneDrive\\Desktop\\Second to the last sem (Hopefully)\\moodcalendar"
+     cd "c:\\Users\\Breezer1111\\OneDrive\\Desktop\\moodcalendar"
      python -m http.server 8000
      ```
 2. Open http://localhost:8000 in your browser.
@@ -61,3 +61,4 @@ js/
 ## Notes
 - All data is stored in the browser’s localStorage; exporting to PDF uses the browser’s print-to-PDF.
 - Tested primarily in Chromium-based browsers (Chrome/Edge). PDF rendering can vary slightly across browsers.
+
