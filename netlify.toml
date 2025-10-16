@@ -1,0 +1,10 @@
+[build]
+  # No build step; serve static files from the repo root
+  publish = "."
+  command = ""
+
+# Optional: long-cache static assets; adjust as needed
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

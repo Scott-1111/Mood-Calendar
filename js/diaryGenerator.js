@@ -217,6 +217,26 @@ const DiaryGeneratorModule = (function() {
 
     // Removed unused preview-related functions (generateDiaryHTML, closePreview)
 
+    // Load an external script dynamically (used for mobile PDF fallback)
+    function loadScriptOnce(src) {
+        return new Promise((resolve, reject) => {
+            if (document.querySelector(`script[src="${src}"]`)) {
+                resolve();
+                return;
+            }
+            const s = document.createElement('script');
+            s.src = src;
+            s.async = true;
+            s.onload = () => resolve();
+            s.onerror = () => reject(new Error('Failed to load script: ' + src));
+            document.head.appendChild(s);
+        });
+    }
+
+    function isMobileDevice() {
+        return /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    }
+
     /**
      * Export diary as PDF (print functionality) — FIXED & REDESIGNED
      */
@@ -272,8 +292,8 @@ const DiaryGeneratorModule = (function() {
 
     const printWindow = window.open('', '_blank');
     const baseHref = (document.baseURI || (location.origin + location.pathname)).replace(/[^/]*$/, '');
-        const monthCalendarHTML = buildPrintableMonthCalendarHTML(entries, new Date());
-        const printContent = `
+    const monthCalendarHTML = buildPrintableMonthCalendarHTML(entries, new Date());
+    const printContent = `
             <!DOCTYPE html>
             <html lang="en">
             <head>
@@ -419,17 +439,75 @@ const DiaryGeneratorModule = (function() {
             </html>
         `;
 
-        printWindow.document.write(printContent);
-        printWindow.document.close();
+        // Mobile fallback: generate and download a PDF using html2pdf if printing is unreliable
+        if (isMobileDevice()) {
+            const html2pdfCdn = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+            loadScriptOnce(html2pdfCdn).then(() => {
+                try {
+                    const parser = new DOMParser();
+                    const parsed = parser.parseFromString(printContent, 'text/html');
+                    const styleEl = parsed.querySelector('style');
+                    const bodyFrag = parsed.body;
 
-        printWindow.onload = function() {
-            setTimeout(() => {
-                printWindow.print();
-            }, 600);
-        };
+                    const container = document.createElement('div');
+                    container.style.position = 'fixed';
+                    container.style.left = '-9999px';
+                    container.style.top = '0';
+                    // Copy styles into container within current document context
+                    if (styleEl) {
+                        const styleCopy = document.createElement('style');
+                        styleCopy.textContent = styleEl.textContent || '';
+                        container.appendChild(styleCopy);
+                    }
+                    // Move children from parsed body into the container
+                    while (bodyFrag.firstChild) {
+                        container.appendChild(bodyFrag.firstChild);
+                    }
+                    document.body.appendChild(container);
 
-        if (window.ToastModule) {
-            window.ToastModule.show('Opening print view for your diary...', 'success');
+                    const opt = {
+                        margin:       0,
+                        filename:     'MyMoodDiary.pdf',
+                        image:        { type: 'jpeg', quality: 0.95 },
+                        html2canvas:  { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+                        jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' },
+                        pagebreak:    { mode: ['css', 'legacy'] }
+                    };
+
+                    // html2pdf is attached to window by the CDN script
+                    window.html2pdf().set(opt).from(container).save().then(() => {
+                        container.remove();
+                        if (window.ToastModule) {
+                            window.ToastModule.show('Your diary PDF was downloaded.', 'success');
+                        }
+                    }).catch(err => {
+                        container.remove();
+                        if (window.ToastModule) {
+                            window.ToastModule.show('PDF generation failed on mobile. Try from a desktop browser.', 'error');
+                        }
+                        console.error(err);
+                    });
+                } catch (e) {
+                    if (window.ToastModule) {
+                        window.ToastModule.show('Mobile PDF export encountered an error.', 'error');
+                    }
+                    console.error(e);
+                }
+            }).catch(() => {
+                if (window.ToastModule) {
+                    window.ToastModule.show('Could not load PDF generator. Try desktop export.', 'error');
+                }
+            });
+        } else {
+            // Desktop: open a print window (supports Save as PDF on most browsers)
+            printWindow.document.write(printContent);
+            printWindow.document.close();
+            printWindow.onload = function() {
+                setTimeout(() => { printWindow.print(); }, 600);
+            };
+            if (window.ToastModule) {
+                window.ToastModule.show('Opening print view for your diary...', 'success');
+            }
         }
     }
 
