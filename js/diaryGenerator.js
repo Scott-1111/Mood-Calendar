@@ -236,6 +236,68 @@ const DiaryGeneratorModule = (function() {
     function isMobileDevice() {
         return /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
     }
+    function isInAppBrowser() {
+        const ua = navigator.userAgent || '';
+        // Common in-app markers: Facebook/Messenger/Instagram/Twitter/Line
+        return /(FBAN|FBAV|FB_IAB|FBAN|Instagram|Line|Twitter|FBMD|FBBV|FB_IAB)/i.test(ua);
+    }
+
+    // Robust mobile PDF rendering using a hidden iframe to ensure styles/images resolve
+    function renderPdfFromHtmlInIframe(html, opt, inApp) {
+        return new Promise((resolve, reject) => {
+            const iframe = document.createElement('iframe');
+            iframe.style.position = 'fixed';
+            iframe.style.left = '-9999px';
+            iframe.style.top = '0';
+            iframe.style.width = '1024px'; // generous width for layout
+            iframe.style.height = '1440px';
+            iframe.setAttribute('aria-hidden', 'true');
+            document.body.appendChild(iframe);
+
+            const cleanup = () => {
+                try { document.body.removeChild(iframe); } catch (_) {}
+            };
+
+            function waitForImages(idoc, timeoutMs = 5000) {
+                const imgs = Array.from(idoc.images || []);
+                if (imgs.length === 0) return Promise.resolve();
+                const waiters = imgs.map(img => new Promise(res => {
+                    if (img.complete) return res();
+                    const done = () => { img.removeEventListener('load', done); img.removeEventListener('error', done); res(); };
+                    img.addEventListener('load', done);
+                    img.addEventListener('error', done);
+                }));
+                const timeout = new Promise(res => setTimeout(res, timeoutMs));
+                return Promise.race([Promise.all(waiters), timeout]);
+            }
+
+            iframe.onload = () => {
+                try {
+                    const idoc = iframe.contentDocument;
+                    if (!idoc) throw new Error('iframe document not available');
+                    // Wait for images (and a small extra delay for style layout)
+                    waitForImages(idoc).then(() => new Promise(r => setTimeout(r, 300))).then(() => {
+                        try {
+                            const sourceEl = idoc.body;
+                            window.html2pdf().set(opt).from(sourceEl).toPdf().get('pdf').then(pdf => {
+                                const blob = pdf.output('blob');
+                                const url = URL.createObjectURL(blob);
+                                resolve({ url, blob, cleanup });
+                            }).catch(err => { cleanup(); reject(err); });
+                        } catch (e) { cleanup(); reject(e); }
+                    });
+                } catch (e) { cleanup(); reject(e); }
+            };
+
+            try {
+                // Use srcdoc so styles and base href inside html apply correctly
+                iframe.srcdoc = html;
+            } catch (e) {
+                cleanup();
+                reject(e);
+            }
+        });
+    }
 
     /**
      * Export diary as PDF (print functionality) — FIXED & REDESIGNED
@@ -290,7 +352,6 @@ const DiaryGeneratorModule = (function() {
             `;
         });
 
-    const printWindow = window.open('', '_blank');
     const baseHref = (document.baseURI || (location.origin + location.pathname)).replace(/[^/]*$/, '');
     const monthCalendarHTML = buildPrintableMonthCalendarHTML(entries, new Date());
     const printContent = `
@@ -443,56 +504,51 @@ const DiaryGeneratorModule = (function() {
         if (isMobileDevice()) {
             const html2pdfCdn = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
             loadScriptOnce(html2pdfCdn).then(() => {
-                try {
-                    const parser = new DOMParser();
-                    const parsed = parser.parseFromString(printContent, 'text/html');
-                    const styleEl = parsed.querySelector('style');
-                    const bodyFrag = parsed.body;
-
-                    const container = document.createElement('div');
-                    container.style.position = 'fixed';
-                    container.style.left = '-9999px';
-                    container.style.top = '0';
-                    // Copy styles into container within current document context
-                    if (styleEl) {
-                        const styleCopy = document.createElement('style');
-                        styleCopy.textContent = styleEl.textContent || '';
-                        container.appendChild(styleCopy);
-                    }
-                    // Move children from parsed body into the container
-                    while (bodyFrag.firstChild) {
-                        container.appendChild(bodyFrag.firstChild);
-                    }
-                    document.body.appendChild(container);
-
-                    const opt = {
-                        margin:       0,
-                        filename:     'MyMoodDiary.pdf',
-                        image:        { type: 'jpeg', quality: 0.95 },
-                        html2canvas:  { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
-                        jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' },
-                        pagebreak:    { mode: ['css', 'legacy'] }
-                    };
-
-                    // html2pdf is attached to window by the CDN script
-                    window.html2pdf().set(opt).from(container).save().then(() => {
-                        container.remove();
-                        if (window.ToastModule) {
-                            window.ToastModule.show('Your diary PDF was downloaded.', 'success');
+                const opt = {
+                    margin:       0,
+                    filename:     'MyMoodDiary.pdf',
+                    image:        { type: 'jpeg', quality: 0.95 },
+                    html2canvas:  { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+                    jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' },
+                    pagebreak:    { mode: ['css', 'legacy'] }
+                };
+                const inApp = isInAppBrowser();
+                return renderPdfFromHtmlInIframe(printContent, opt, inApp).then(({ url, blob, cleanup }) => {
+                    try {
+                        if (inApp) {
+                            // Open a viewer tab with the PDF embedded (more reliable than direct blob download in in-app browsers)
+                            const viewer = window.open('', '_blank');
+                            if (viewer && viewer.document) {
+                                viewer.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>My Mood Diary PDF</title></head><body style="margin:0"><iframe src="${url}" style="position:fixed;inset:0;border:0;width:100%;height:100%"></iframe></body></html>`);
+                                viewer.document.close();
+                                if (window.ToastModule) window.ToastModule.show('PDF opened in a new tab. Use the menu to save/share.', 'success');
+                                // Do not revoke the URL immediately as the new tab needs it
+                            } else {
+                                // Fallback to navigating the current tab
+                                window.location.href = url;
+                            }
+                            cleanup();
+                        } else {
+                            // Normal mobile browsers: trigger a download
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = opt.filename;
+                            document.body.appendChild(a);
+                            a.click();
+                            setTimeout(() => {
+                                URL.revokeObjectURL(url);
+                                a.remove();
+                                cleanup();
+                            }, 1500);
+                            if (window.ToastModule) window.ToastModule.show('Your diary PDF was downloaded.', 'success');
                         }
-                    }).catch(err => {
-                        container.remove();
+                    } catch (e) {
+                        cleanup();
                         if (window.ToastModule) {
-                            window.ToastModule.show('PDF generation failed on mobile. Try from a desktop browser.', 'error');
+                            window.ToastModule.show('Could not trigger download in this browser.', 'error');
                         }
-                        console.error(err);
-                    });
-                } catch (e) {
-                    if (window.ToastModule) {
-                        window.ToastModule.show('Mobile PDF export encountered an error.', 'error');
                     }
-                    console.error(e);
-                }
+                });
             }).catch(() => {
                 if (window.ToastModule) {
                     window.ToastModule.show('Could not load PDF generator. Try desktop export.', 'error');
@@ -500,6 +556,7 @@ const DiaryGeneratorModule = (function() {
             });
         } else {
             // Desktop: open a print window (supports Save as PDF on most browsers)
+            const printWindow = window.open('', '_blank');
             printWindow.document.write(printContent);
             printWindow.document.close();
             printWindow.onload = function() {
