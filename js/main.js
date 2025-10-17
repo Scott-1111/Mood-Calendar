@@ -588,6 +588,67 @@ const BurgerMenuModule = (function() {
     };
 })();
 
+// Loading Screen Module
+const LoadingScreenModule = (function() {
+    let loadingScreen = null;
+    let introVideo = null;
+    let isHidden = false;
+
+    /**
+     * Hide loading screen
+     */
+    function hideLoadingScreen() {
+        if (isHidden || !loadingScreen) return;
+        
+        isHidden = true;
+        loadingScreen.classList.add('hidden');
+        
+        // Remove from DOM after transition
+        setTimeout(() => {
+            if (loadingScreen && loadingScreen.parentNode) {
+                loadingScreen.style.display = 'none';
+            }
+        }, 500);
+    }
+
+    /**
+     * Initialize loading screen
+     */
+    function init() {
+        loadingScreen = document.getElementById('loading-screen');
+        introVideo = document.getElementById('intro-video');
+        
+        if (!loadingScreen || !introVideo) return;
+
+        // Hide loading screen when video ends
+        introVideo.addEventListener('ended', () => {
+            hideLoadingScreen();
+        });
+
+        // Allow clicking to skip
+        loadingScreen.addEventListener('click', () => {
+            hideLoadingScreen();
+        });
+
+        // Fallback: hide after 5 seconds if video doesn't play
+        setTimeout(() => {
+            hideLoadingScreen();
+        }, 5000);
+
+        // Handle video errors
+        introVideo.addEventListener('error', () => {
+            console.warn('Video failed to load, hiding loading screen');
+            hideLoadingScreen();
+        });
+    }
+
+    // Public API
+    return {
+        init,
+        hideLoadingScreen
+    };
+})();
+
 // View Navigation Module
 const ViewNavigationModule = (function() {
     /**
@@ -654,6 +715,9 @@ const ViewNavigationModule = (function() {
 
 // Initialize Application
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize loading screen first
+    LoadingScreenModule.init();
+    
     // Initialize all modules
     ConfirmationModule.init();
     BurgerMenuModule.init();

@@ -319,7 +319,6 @@ const DiaryGeneratorModule = (function() {
         // Sort oldest → newest
         entriesArray.sort((a, b) => new Date(a.date) - new Date(b.date));
 
-        const entriesCount = entriesArray.length;
         const today = new Date().toLocaleDateString('en-US', { 
             weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
         });
@@ -339,15 +338,13 @@ const DiaryGeneratorModule = (function() {
                 ? `<img src="${entry.image}" alt="Memory" class="entry-image">`
                 : '';
 
+            // Image comes BEFORE text content
             diaryPagesHTML += `
-                <div class="diary-page">
-                    <div class="page-content">
-                        <div class="entry-header">${formattedDate}</div>
-                        <div class="entry-mood">${moodEmoji ? `${moodEmoji} ${moodLabel}` : ''}</div>
-                        <div class="entry-story">${story}</div>
-                        ${imageHTML}
-                    </div>
-                    <div class="page-badge">Page ${index + 1}</div>
+                <div class="diary-entry-wrapper">
+                    <div class="entry-header">${formattedDate}</div>
+                    <div class="entry-mood">${moodEmoji ? `${moodEmoji} ${moodLabel}` : ''}</div>
+                    ${imageHTML}
+                    <div class="entry-story">${story}</div>
                 </div>
             `;
         });
@@ -360,7 +357,7 @@ const DiaryGeneratorModule = (function() {
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>My Mood Diary - MoodCalendar</title>
+                <title></title>
         <base href="${baseHref}">
                 <style>
                     * {
@@ -374,8 +371,23 @@ const DiaryGeneratorModule = (function() {
                         color: #222;
                         line-height: 1.7;
                     }
-                    /* Zero margins to allow full-width cover bands */
-                    @page { margin: 0; }
+                    
+                    /* Page setup - try to suppress browser headers/footers */
+                    @page { 
+                        margin: 0.8in;
+                        size: A4 portrait;
+                    }
+                    
+                    @media print {
+                        @page {
+                            margin: 0.8in;
+                        }
+                        
+                        /* Hide browser-generated headers and footers */
+                        body {
+                            margin: 0;
+                        }
+                    }
 
                     /* COVER PAGE */
                     .cover-page {
@@ -387,6 +399,8 @@ const DiaryGeneratorModule = (function() {
                         page-break-after: always;
                         position: relative;
                         background: #fff;
+                        margin: -0.8in;
+                        padding: 0;
                     }
                     .cover-top { background-color: #3F51B5; }
                     .cover-bottom { background-color: #3F51B5; }
@@ -415,71 +429,143 @@ const DiaryGeneratorModule = (function() {
                     }
 
                     /* PRINTABLE MONTH CALENDAR */
-                    .print-month { page-break-after: always; padding: 0.5in 0.2in; }
-                    .print-month-title { font-size: 1.6rem; font-weight: 800; color: #374151; margin: 0 0 16px; text-align: center; }
-                    .print-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
-                    .cal-hdr { text-align: center; font-weight: 700; color: #4b5563; padding: 8px 0; border-bottom: 2px solid #e5e7eb; }
-                    .cal-cell { border: 1px solid #e5e7eb; border-radius: 8px; min-height: 78px; padding: 6px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; background: #fff; }
-                    .cal-empty { background: #fafafa; }
-                    .cal-day { align-self: flex-start; font-weight: 700; color: #111827; }
-                    .cal-emoji { font-size: 1.6rem; margin-top: 6px; }
-
-                    /* DIARY PAGES */
-                    .diary-page {
-                        page-break-after: always;
-                        position: relative;
-                        overflow: hidden;
-                        padding: 0; /* No padding so badge can sit at true page corner */
-                        min-height: 100vh; /* Fill full printed page height so badge is at footer */
-                        display: block;
+                    .print-month { 
+                        page-break-after: always; 
+                        page-break-inside: avoid;
                     }
-                    .page-content { padding: 0.8in; padding-bottom: calc(0.8in + 28px); }
+                    .print-month-title { 
+                        font-size: 1.6rem; 
+                        font-weight: 800; 
+                        color: #374151; 
+                        margin: 0 0 16px; 
+                        text-align: center; 
+                    }
+                    .print-cal-grid { 
+                        display: grid; 
+                        grid-template-columns: repeat(7, 1fr); 
+                        gap: 6px; 
+                    }
+                    .cal-hdr { 
+                        text-align: center; 
+                        font-weight: 700; 
+                        color: #4b5563; 
+                        padding: 8px 0; 
+                        border-bottom: 2px solid #e5e7eb; 
+                    }
+                    .cal-cell { 
+                        border: 1px solid #e5e7eb; 
+                        border-radius: 8px; 
+                        min-height: 78px; 
+                        padding: 6px; 
+                        display: flex; 
+                        flex-direction: column; 
+                        align-items: center; 
+                        justify-content: flex-start; 
+                        background: #fff; 
+                    }
+                    .cal-empty { background: #fafafa; }
+                    .cal-day { 
+                        align-self: flex-start; 
+                        font-weight: 700; 
+                        color: #111827; 
+                    }
+                    .cal-emoji { 
+                        font-size: 1.6rem; 
+                        margin-top: 6px; 
+                    }
+
+                    /* DIARY CONTENT CONTAINER */
+                    .diary-content {
+                        position: relative;
+                    }
+
+                    /* DIARY ENTRY WRAPPER - Allow natural page breaks */
+                    .diary-entry-wrapper {
+                        page-break-after: always;
+                        page-break-inside: auto;
+                        position: relative;
+                        orphans: 3;
+                        widows: 3;
+                        padding-bottom: 1rem;
+                    }
+                    
+                    .diary-entry-wrapper:last-child {
+                        page-break-after: auto;
+                    }
+
                     .entry-header {
                         color: #3F51B5;
                         font-weight: 600;
                         font-size: 1.1rem;
                         margin-bottom: 6px;
+                        page-break-after: avoid;
                     }
+                    
                     .entry-mood {
                         font-size: 1rem;
                         color: #3F51B5;
                         margin-bottom: 15px;
+                        page-break-after: avoid;
                     }
+                    
+                    /* Image BEFORE story content */
+                    .entry-image {
+                        display: block;
+                        max-width: 100%;
+                        max-height: 5in;
+                        height: auto;
+                        border-radius: 8px;
+                        margin: 0 auto 20px;
+                        page-break-before: avoid;
+                        page-break-after: avoid;
+                        page-break-inside: avoid;
+                    }
+                    
                     .entry-story {
                         font-size: 1rem;
                         text-align: justify;
                         white-space: pre-wrap;
                         margin-bottom: 15px;
                         overflow-wrap: break-word;
-                    }
-                    .entry-image {
-                        display: block;
-                        max-width: 100%;
-                        border-radius: 8px;
-                        margin: 0 auto 16px;
+                        word-wrap: break-word;
+                        hyphens: auto;
+                        orphans: 3;
+                        widows: 3;
                     }
 
-                    /* Per-page badge anchored within each page content */
-                    .page-badge {
-                        position: absolute;
-                        /* Align with content footer-right (same as .page-content padding) */
-                        bottom: 0.5in;
-                        right: 0.5in;
-                        background: #6366f1;
-                        color: #fff;
-                        padding: 6px 10px;
-                        border-radius: 8px;
-                        font-weight: 700;
-                        font-size: 12px;
-                        box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-                        z-index: 10;
+                    /* Ensure proper paragraph breaks */
+                    .entry-story p {
+                        margin-bottom: 1em;
+                        orphans: 2;
+                        widows: 2;
                     }
 
                     @media print {
-                        body { margin: 0; }
-                        .cover-page, .diary-page { page-break-inside: avoid; }
+                        body { 
+                            margin: 0;
+                        }
+                        
+                        .cover-page { 
+                            page-break-inside: avoid; 
+                        }
+                        
+                        .print-month {
+                            page-break-inside: avoid;
+                        }
+                        
+                        /* Better handling of images in print */
+                        .entry-image {
+                            max-height: 4.5in;
+                        }
                     }
-                    @media screen { .page-badge { display: none; } }
+                    
+                    @media screen { 
+                        /* Add visual separation between entries on screen */
+                        .diary-entry-wrapper {
+                            padding-bottom: 2rem;
+                            border-bottom: 2px solid #e5e7eb;
+                        }
+                    }
                 </style>
             </head>
             <body>
@@ -495,76 +581,32 @@ const DiaryGeneratorModule = (function() {
                 </div>
                 ${monthCalendarHTML}
 
-                ${diaryPagesHTML}
+                <div class="diary-content">
+                    ${diaryPagesHTML}
+                </div>
             </body>
             </html>
         `;
 
-        // Mobile fallback: generate and download a PDF using html2pdf if printing is unreliable
-        if (isMobileDevice()) {
-            const html2pdfCdn = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-            loadScriptOnce(html2pdfCdn).then(() => {
-                const opt = {
-                    margin:       0,
-                    filename:     'MyMoodDiary.pdf',
-                    image:        { type: 'jpeg', quality: 0.95 },
-                    html2canvas:  { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
-                    jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' },
-                    pagebreak:    { mode: ['css', 'legacy'] }
-                };
-                const inApp = isInAppBrowser();
-                return renderPdfFromHtmlInIframe(printContent, opt, inApp).then(({ url, blob, cleanup }) => {
-                    try {
-                        if (inApp) {
-                            // Open a viewer tab with the PDF embedded (more reliable than direct blob download in in-app browsers)
-                            const viewer = window.open('', '_blank');
-                            if (viewer && viewer.document) {
-                                viewer.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>My Mood Diary PDF</title></head><body style="margin:0"><iframe src="${url}" style="position:fixed;inset:0;border:0;width:100%;height:100%"></iframe></body></html>`);
-                                viewer.document.close();
-                                if (window.ToastModule) window.ToastModule.show('PDF opened in a new tab. Use the menu to save/share.', 'success');
-                                // Do not revoke the URL immediately as the new tab needs it
-                            } else {
-                                // Fallback to navigating the current tab
-                                window.location.href = url;
-                            }
-                            cleanup();
-                        } else {
-                            // Normal mobile browsers: trigger a download
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = opt.filename;
-                            document.body.appendChild(a);
-                            a.click();
-                            setTimeout(() => {
-                                URL.revokeObjectURL(url);
-                                a.remove();
-                                cleanup();
-                            }, 1500);
-                            if (window.ToastModule) window.ToastModule.show('Your diary PDF was downloaded.', 'success');
-                        }
-                    } catch (e) {
-                        cleanup();
-                        if (window.ToastModule) {
-                            window.ToastModule.show('Could not trigger download in this browser.', 'error');
-                        }
-                    }
-                });
-            }).catch(() => {
-                if (window.ToastModule) {
-                    window.ToastModule.show('Could not load PDF generator. Try desktop export.', 'error');
-                }
-            });
-        } else {
-            // Desktop: open a print window (supports Save as PDF on most browsers)
-            const printWindow = window.open('', '_blank');
-            printWindow.document.write(printContent);
-            printWindow.document.close();
-            printWindow.onload = function() {
-                setTimeout(() => { printWindow.print(); }, 600);
-            };
+        // Simple and reliable: open print window
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
             if (window.ToastModule) {
-                window.ToastModule.show('Opening print view for your diary...', 'success');
+                window.ToastModule.show('Please allow pop-ups to export your diary.', 'error');
             }
+            return;
+        }
+        
+        printWindow.document.write(printContent);
+        printWindow.document.close();
+        printWindow.onload = function() {
+            setTimeout(() => { 
+                printWindow.print(); 
+            }, 600);
+        };
+        
+        if (window.ToastModule) {
+            window.ToastModule.show('Print dialog opened! To remove headers/footers: Click "More settings" and uncheck "Headers and footers"', 'info');
         }
     }
 

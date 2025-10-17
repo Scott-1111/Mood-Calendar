@@ -61,4 +61,3 @@ js/
 ## Notes
 - All data is stored in the browser’s localStorage; exporting to PDF uses the browser’s print-to-PDF.
 - Tested primarily in Chromium-based browsers (Chrome/Edge). PDF rendering can vary slightly across browsers.
-
